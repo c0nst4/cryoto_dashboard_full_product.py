@@ -1,0 +1,16 @@
+streamlit
+yfinance
+pandas
+numpy
+requests
+beautifulsoup4
+ta
+plotly
+scikit-learn
+joblib
+lxml
+html5lib
+feedparser
+statsmodels
+pandas_datareader
+beautifulsoup4
