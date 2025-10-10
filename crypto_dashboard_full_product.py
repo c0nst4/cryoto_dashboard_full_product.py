@@ -417,26 +417,78 @@ def detect_signals(df):
     return signals
 
 
-# ---------------- SIGNAL-AUSGABE ----------------
-st.subheader("📊 Technische Swing-Signale")
-
-for asset in ASSETS:
-    st.markdown(f"### {asset}")
-    df = build_features(asset)
-    if df.empty:
-        st.warning(f"Keine Daten für {asset}.")
-        continue
-    sigs = detect_signals(df)
-    for s in sigs:
-        if "🟢" in s:
-            st.success(s)
-        elif "🔻" in s:
-            st.error(s)
-        else:
-            st.info(s)
-    
-    st.markdown("---")
+def show_signals_section():
+    """Zeigt nur einmal die technischen Swing-Signale an."""
+    st.subheader("📊 Technische Swing-Signale")
+    for asset in ASSETS:
+        st.markdown(f"### {asset}")
+        df = build_features(asset)
+        if df.empty:
+            st.warning(f"Keine Daten für {asset}.")
+            continue
+        sigs = detect_signals(df)
+        for s in sigs:
+            if "🟢" in s:
+                st.success(s)
+            elif "🔻" in s:
+                st.error(s)
+            else:
+                st.info(s)
+        st.markdown("---")
     st.caption("⚠️ Prognosen basieren auf historischen Mustern. Keine Anlageberatung.")
+
+
+def main():
+    st.header("💡 Kombinierte ML-Prognosen (Technik + Makro + Nachrichten)")
+
+    # 🌍 Makro-Analyse
+    st.subheader("🌍 Makro-Umfeld")
+    macro = fetch_macro_timeseries()
+    if macro is not None and not macro.empty:
+        last = macro.iloc[-1]
+        st.write(f"DXY: {safe_num(last.get('DXY')):.2f} | VIX: {safe_num(last.get('VIX')):.2f}")
+    else:
+        st.info("Makro-Daten nicht verfügbar.")
+
+    # 📰 News
+    st.subheader("📰 Relevante Krypto- und Makro-News")
+    for n in fetch_news_multi(12):
+        src, title, link = n["source"], n["title"], n["link"]
+        st.markdown(f"- **[{src}]** [{title}]({link})" if link else f"- **[{src}]** {title}")
+
+    # 📈 Preisprognosen
+    st.subheader("📈 Preisprognosen (Tag / Woche / Monat)")
+    horizons = {"Day (now)":1,"Day (next)":2,"Week (now)":7,"Week (next)":14,"Month (now)":30,"Month (next)":60}
+    for a in ASSETS:
+        st.markdown(f"## {a}")
+        df = build_features(a)
+        if df.empty:
+            st.warning(f"Keine Daten für {a}.")
+            continue
+        rows = []
+        for label, h in horizons.items():
+            p, info = train_predict(df, h)
+            if p is None:
+                rows.append({"Zeitraum":label,"Prognose":"n/a","Info":info.get("status","")})
+            else:
+                trend = "🟢 Bullish" if p>0.01 else ("🔻 Bearish" if p<-0.01 else "⚪ Neutral")
+                rows.append({"Zeitraum":label,"Prognose":f"{p*100:.2f}%","Trend":trend,"Modell":info.get("model",""),"n":info.get("n","")})
+        st.table(pd.DataFrame(rows))
+
+    # 🧠 Multi-Timeframe Prognose
+    st.subheader("🧠 Multi-Timeframe-Prognose (4h + 1d + 1w kombiniert)")
+    for asset in ASSETS:
+        st.markdown(f"### {asset}")
+        pred, info = train_predict_multi_tf(asset, horizon_days=7)
+        if pred is None:
+            st.warning(f"{asset}: Keine Prognose (Grund: {info.get('status','unbekannt')})")
+        else:
+            trend = "🟢 Bullish" if pred > 0.01 else ("🔻 Bearish" if pred < -0.01 else "⚪ Neutral")
+            st.write(f"{trend} Erwartete 7-Tage-Rendite: **{pred*100:.2f}%** — Modell: {info.get('model','?')} — R²={info.get('r2','n/a')}")
+
+    # 📊 Signale
+    show_signals_section()
+
 
 if __name__ == "__main__":
     main()
