@@ -268,81 +268,100 @@ def main():
                 rows.append({"Zeitraum":label,"Prognose":f"{p*100:.2f}%","Trend":trend,"Modell":info.get("model",""),"n":info.get("n","")})
         st.table(pd.DataFrame(rows))
 
-# ---------------- SWING SIGNALS ----------------
+# ---------------- SWING SIGNALS (robust) ----------------
 def detect_signals(df):
-    """Analysiert RSI, MACD, EMA, SMA und gibt bullishe/bearishe Textsignale zurück."""
+    """Analysiert RSI, MACD, EMA, SMA und gibt bullishe/bearishe Textsignale zurück (robust gegen Spaltennamen-Fehler)."""
     signals = []
     if df is None or df.empty:
         return ["Keine Daten"]
 
-    # letzte Zeilen
-    df = df.dropna(subset=["Close"]).tail(3).copy()
+    # Versuche, Close-Spalte zu finden (robust)
+    close_col = None
+    for c in df.columns:
+        if "close" in str(c).lower():
+            close_col = c
+            break
+
+    if close_col is None:
+        return ["❌ Keine 'Close'-Spalte gefunden (keine Signalanalyse möglich)."]
+
+    # sichere Kopie letzter Zeilen
+    try:
+        df = df.dropna(subset=[close_col]).tail(3).copy()
+    except Exception:
+        df = df.tail(3).copy()
+
     if df.shape[0] < 3:
-        return ["Zu wenige Daten"]
+        return ["⚪ Zu wenige Kursdaten für Signale"]
 
     latest = df.iloc[-1]
     prev = df.iloc[-2]
 
     # === RSI Signale ===
-    try:
-        if latest["RSI"] > 70:
-            signals.append("🔻 RSI überkauft (>70) → mögliches bearishes Signal")
-        elif latest["RSI"] < 30:
-            signals.append("🟢 RSI überverkauft (<30) → mögliches bullishes Signal")
-        elif prev["RSI"] < 50 and latest["RSI"] > 50:
-            signals.append("🟢 RSI steigt über 50 → Momentum dreht bullisch")
-        elif prev["RSI"] > 50 and latest["RSI"] < 50:
-            signals.append("🔻 RSI fällt unter 50 → Momentum dreht bärisch")
-    except Exception:
-        pass
+    if "RSI" in df.columns:
+        try:
+            if latest["RSI"] > 70:
+                signals.append("🔻 RSI überkauft (>70) → mögliches bearishes Signal")
+            elif latest["RSI"] < 30:
+                signals.append("🟢 RSI überverkauft (<30) → mögliches bullishes Signal")
+            elif prev["RSI"] < 50 and latest["RSI"] > 50:
+                signals.append("🟢 RSI steigt über 50 → Momentum dreht bullisch")
+            elif prev["RSI"] > 50 and latest["RSI"] < 50:
+                signals.append("🔻 RSI fällt unter 50 → Momentum dreht bärisch")
+        except Exception:
+            pass
 
     # === MACD Signale ===
-    try:
-        if prev["MACD"] < prev["MACD_SIGNAL"] and latest["MACD"] > latest["MACD_SIGNAL"]:
-            signals.append("🟢 MACD kreuzt über Signallinie → bullishes Signal")
-        elif prev["MACD"] > prev["MACD_SIGNAL"] and latest["MACD"] < latest["MACD_SIGNAL"]:
-            signals.append("🔻 MACD kreuzt unter Signallinie → bearishes Signal")
-        elif latest["MACD_DIFF"] > 0:
-            signals.append("🟢 MACD positiv → bullische Tendenz")
-        elif latest["MACD_DIFF"] < 0:
-            signals.append("🔻 MACD negativ → bärische Tendenz")
-    except Exception:
-        pass
+    if "MACD" in df.columns and "MACD_SIGNAL" in df.columns:
+        try:
+            if prev["MACD"] < prev["MACD_SIGNAL"] and latest["MACD"] > latest["MACD_SIGNAL"]:
+                signals.append("🟢 MACD kreuzt über Signallinie → bullishes Signal")
+            elif prev["MACD"] > prev["MACD_SIGNAL"] and latest["MACD"] < latest["MACD_SIGNAL"]:
+                signals.append("🔻 MACD kreuzt unter Signallinie → bearishes Signal")
+            elif "MACD_DIFF" in df.columns:
+                if latest["MACD_DIFF"] > 0:
+                    signals.append("🟢 MACD positiv → bullische Tendenz")
+                elif latest["MACD_DIFF"] < 0:
+                    signals.append("🔻 MACD negativ → bärische Tendenz")
+        except Exception:
+            pass
 
     # === EMA Signale (Crossovers) ===
-    try:
-        if prev["EMA20"] < prev["EMA50"] and latest["EMA20"] > latest["EMA50"]:
-            signals.append("🟢 EMA20 kreuzt über EMA50 → kurzfristig bullisch")
-        elif prev["EMA20"] > prev["EMA50"] and latest["EMA20"] < latest["EMA50"]:
-            signals.append("🔻 EMA20 kreuzt unter EMA50 → kurzfristig bärisch")
+    if all(c in df.columns for c in ["EMA20", "EMA50", "EMA200"]):
+        try:
+            if prev["EMA20"] < prev["EMA50"] and latest["EMA20"] > latest["EMA50"]:
+                signals.append("🟢 EMA20 kreuzt über EMA50 → kurzfristig bullisch")
+            elif prev["EMA20"] > prev["EMA50"] and latest["EMA20"] < latest["EMA50"]:
+                signals.append("🔻 EMA20 kreuzt unter EMA50 → kurzfristig bärisch")
 
-        if prev["EMA50"] < prev["EMA200"] and latest["EMA50"] > latest["EMA200"]:
-            signals.append("🟢 EMA50 kreuzt über EMA200 → mittelfristig bullisch")
-        elif prev["EMA50"] > prev["EMA200"] and latest["EMA50"] < latest["EMA200"]:
-            signals.append("🔻 EMA50 kreuzt unter EMA200 → mittelfristig bärisch")
-    except Exception:
-        pass
+            if prev["EMA50"] < prev["EMA200"] and latest["EMA50"] > latest["EMA200"]:
+                signals.append("🟢 EMA50 kreuzt über EMA200 → mittelfristig bullisch")
+            elif prev["EMA50"] > prev["EMA200"] and latest["EMA50"] < latest["EMA200"]:
+                signals.append("🔻 EMA50 kreuzt unter EMA200 → mittelfristig bärisch")
+        except Exception:
+            pass
 
     # === SMA Signale (Crossovers) ===
-    try:
-        if prev["SMA20"] < prev["SMA50"] and latest["SMA20"] > latest["SMA50"]:
-            signals.append("🟢 SMA20 kreuzt über SMA50 → kurzfristig bullisch")
-        elif prev["SMA20"] > prev["SMA50"] and latest["SMA20"] < latest["SMA50"]:
-            signals.append("🔻 SMA20 kreuzt unter SMA50 → kurzfristig bärisch")
+    if all(c in df.columns for c in ["SMA20", "SMA50", "SMA200"]):
+        try:
+            if prev["SMA20"] < prev["SMA50"] and latest["SMA20"] > latest["SMA50"]:
+                signals.append("🟢 SMA20 kreuzt über SMA50 → kurzfristig bullisch")
+            elif prev["SMA20"] > prev["SMA50"] and latest["SMA20"] < latest["SMA50"]:
+                signals.append("🔻 SMA20 kreuzt unter SMA50 → kurzfristig bärisch")
 
-        if prev["SMA50"] < prev["SMA200"] and latest["SMA50"] > latest["SMA200"]:
-            signals.append("🟢 SMA50 kreuzt über SMA200 → mittelfristig bullisch")
-        elif prev["SMA50"] > prev["SMA200"] and latest["SMA50"] < latest["SMA200"]:
-            signals.append("🔻 SMA50 kreuzt unter SMA200 → mittelfristig bärisch")
-    except Exception:
-        pass
+            if prev["SMA50"] < prev["SMA200"] and latest["SMA50"] > latest["SMA200"]:
+                signals.append("🟢 SMA50 kreuzt über SMA200 → mittelfristig bullisch")
+            elif prev["SMA50"] > prev["SMA200"] and latest["SMA50"] < latest["SMA200"]:
+                signals.append("🔻 SMA50 kreuzt unter SMA200 → mittelfristig bärisch")
+        except Exception:
+            pass
 
     if not signals:
         signals.append("⚪ Keine akuten Swing-Signale erkannt")
     return signals
 
 
-# ---------------- SIGNAL AUSGABE ----------------
+# ---------------- SIGNAL-AUSGABE ----------------
 st.subheader("📊 Technische Swing-Signale")
 
 for asset in ASSETS:
