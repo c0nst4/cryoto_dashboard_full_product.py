@@ -270,6 +270,7 @@ def main():
                 rows.append({"Zeitraum":label,"Prognose":f"{p*100:.2f}%","Trend":trend,"Modell":info.get("model",""),"n":info.get("n","")})
         st.table(pd.DataFrame(rows))
 
+
 # ---------------- MULTI-TIMEFRAME ML-MODEL ----------------
 def build_multi_tf_features(asset):
     """
@@ -322,7 +323,6 @@ def train_predict_multi_tf(asset, horizon_days=7):
         return pred, {"model": "GB-multiTF", "r2": r2, "n": len(df)}
     except Exception:
         return None, {"status": "train_fail"}
-
 
 # ---------------- SWING SIGNALS (robust) ----------------
 def detect_signals(df):
