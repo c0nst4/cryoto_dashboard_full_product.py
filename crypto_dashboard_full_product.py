@@ -271,58 +271,55 @@ def main():
         st.table(pd.DataFrame(rows))
 
 
-# ---------------- MULTI-TIMEFRAME ML-MODEL ----------------
+# ---------------- MULTI-TIMEFRAME PROGNOSE ---------------
 def build_multi_tf_features(asset):
     """
     Kombiniert Daten aus 4h-, 1d- und 1w-Timeframes.
-    Liefert einen zusammengeführten DataFrame für ML-Prognosen.
+    Erzwingt einheitlichen Index (datetime64[ns]),
+    um Sortierfehler (__richcmp__) zuverlässig zu verhindern.
     """
-    intervals = {"4h":"60d", "1d":"max", "1wk":"5y"}
+    intervals = {"4h": "60d", "1d": "max", "1wk": "5y"}
     frames = []
+
     for tf, period in intervals.items():
         try:
             df = yf.download(asset, period=period, interval=tf, progress=False)
-            if df.empty: 
+            if df.empty:
                 continue
             df = compute_technical(df)
             df["Ret1"] = df["Close"].pct_change()
             df["tf"] = tf
+
+            # Index strikt zu datetime umwandeln und Zeitzonen entfernen
+            df.index = pd.to_datetime(df.index, errors="coerce")
+            df.index = df.index.tz_localize(None)
+            df = df[~df.index.isna()]
             frames.append(df)
-        except Exception:
+        except Exception as e:
+            print(f"Fehler in {asset}-{tf}: {e}")
             continue
+
     if not frames:
         return pd.DataFrame()
-    df_all = pd.concat(frames, axis=0)
-    df_all = df_all.sort_index().drop_duplicates()
+
+    try:
+        # Zusammenführen
+        df_all = pd.concat(frames, axis=0)
+
+        # Index vereinheitlichen in int64 für Sortierung
+        idx_numeric = pd.to_datetime(df_all.index, errors="coerce").view(np.int64)
+        df_all = df_all.assign(_sort_index=idx_numeric)
+        df_all = df_all.dropna(subset=["_sort_index"])
+        df_all = df_all.sort_values(by="_sort_index").drop(columns="_sort_index")
+
+        # Index wieder in echte Datetime umwandeln
+        df_all.index = pd.to_datetime(df_all.index, errors="coerce")
+        df_all = df_all[~df_all.index.isna()].drop_duplicates()
+    except Exception:
+        df_all = pd.concat(frames, axis=0).drop_duplicates()
+
     return df_all.fillna(0)
 
-
-def train_predict_multi_tf(asset, horizon_days=7):
-    """
-    Trainiert ein GradientBoosting-Modell auf kombinierten Timeframes (4h, 1d, 1w)
-    und prognostiziert den Preis-Return über 'horizon_days'.
-    """
-    df = build_multi_tf_features(asset)
-    if df.empty or len(df) < 80:
-        return None, {"status": "not_enough_rows"}
-
-    df["target"] = df["Close"].shift(-horizon_days) / df["Close"] - 1
-    df = df.dropna()
-    feats = [c for c in ["RSI","MACD_DIFF","EMA20","EMA50","EMA200","SMA20","SMA50","SMA200"] if c in df.columns]
-    if not feats:
-        return None, {"status": "no_features"}
-
-    X = df[feats].values
-    y = df["target"].values
-    try:
-        sc = StandardScaler().fit(X)
-        Xs = sc.transform(X)
-        model = GradientBoostingRegressor(**GB_PARAMS).fit(Xs[:-60], y[:-60])
-        pred = float(model.predict(sc.transform(df[feats].tail(1)))[0])
-        r2 = float(r2_score(y[-60:], model.predict(Xs[-60:])))
-        return pred, {"model": "GB-multiTF", "r2": r2, "n": len(df)}
-    except Exception:
-        return None, {"status": "train_fail"}
 
 # ---------------- SWING SIGNALS (robust) ----------------
 def detect_signals(df):
