@@ -273,3 +273,124 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ============================================================
+# 🧠 MULTI-TIMEFRAME TECHNISCHE + MAKRO PROGNOSE (4H / 1D / 1W)
+# ============================================================
+
+@st.cache_data(ttl=1800)
+def build_multi_tf_features(asset: str):
+    """
+    Lädt Kursdaten in 4h, 1D und 1W und kombiniert RSI, MACD, EMA, SMA mit Makro-Indikatoren.
+    Gibt einen DataFrame mit kombinierten Merkmalen zurück.
+    """
+    tfs = {
+        "4h": "4h",
+        "1d": "1d",
+        "1w": "1wk"
+    }
+    dfs = []
+
+    for name, tf in tfs.items():
+        try:
+            df = yf.download(asset, period="1y", interval=tf, progress=False)
+            if df.empty:
+                continue
+            df = compute_technical(df)
+            df = df[["Close", "RSI", "MACD_DIFF", "EMA20", "EMA50", "EMA200", "SMA20", "SMA50", "SMA200"]].copy()
+            df = df.rename(columns={c: f"{c}_{name}" for c in df.columns})
+            dfs.append(df)
+        except Exception as e:
+            print(f"Fehler bei {tf}: {e}")
+            continue
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df_all = pd.concat(dfs, axis=1).fillna(method="ffill").dropna()
+    macro = fetch_macro_timeseries()
+    if not macro.empty:
+        macro = macro.reindex(df_all.index, method="ffill").fillna(0)
+        df_all["DXY"] = macro["DXY"]
+        df_all["VIX"] = macro["VIX"]
+    fgi, _ = fetch_fear_greed()
+    df_all["FearGreed"] = fgi if fgi else 50
+    return df_all
+
+
+def train_predict_multi_tf(asset, horizon_days=7):
+    """
+    Trainiert ein kombiniertes ML-Modell auf Multi-Timeframe-Indikatoren.
+    Gibt Prognose und Info-Dict zurück.
+    """
+    df = build_multi_tf_features(asset)
+    if df.empty:
+        return None, {"status": "no_data"}
+
+    # Ziel: 7-Tage-Preisänderung
+    df["target"] = df["Close_1d"].shift(-horizon_days) / df["Close_1d"] - 1
+    df = df.dropna()
+    n = len(df)
+    if n < 80:
+        return None, {"status": "not_enough_rows", "n": n}
+
+    feats = [c for c in df.columns if c not in ["target"] and not c.startswith("Close")]
+    X, y = df[feats].values, df["target"].values
+    Xtr, ytr = X[:-50], y[:-50]
+    Xte, yte = X[-50:], y[-50:]
+
+    sc = StandardScaler().fit(Xtr)
+    Xtr, Xte = sc.transform(Xtr), sc.transform(Xte)
+
+    model = GradientBoostingRegressor(**GB_PARAMS)
+    model.fit(Xtr, ytr)
+    pred = float(model.predict(sc.transform(df[feats].tail(1)))[0])
+    r2 = float(r2_score(yte, model.predict(Xte)))
+    return pred, {"model": "GB_MultiTF", "r2": r2, "n": n}
+
+
+# ============================================================
+# 📊 ANZEIGE DER MULTI-TIMEFRAME-PROGNOSE
+# ============================================================
+
+def show_multi_tf_section():
+    st.subheader("🧠 Multi-Timeframe Prognose (4h + 1D + 1W + Makro kombiniert)")
+
+    horizons = {
+        "Day (now)": 1,
+        "Day (next)": 2,
+        "Week (now)": 7,
+        "Week (next)": 14,
+        "Month (now)": 30,
+        "Month (next)": 60
+    }
+
+    for asset in ASSETS:
+        st.markdown(f"### {asset}")
+        rows = []
+        for label, horizon in horizons.items():
+            pred, info = train_predict_multi_tf(asset, horizon_days=horizon)
+            if pred is None:
+                rows.append({
+                    "Zeitraum": label,
+                    "Prognose": "n/a",
+                    "Trend": "⚪",
+                    "Info": info.get("status", "")
+                })
+            else:
+                trend = "🟢 Bullish" if pred > 0.01 else ("🔻 Bearish" if pred < -0.01 else "⚪ Neutral")
+                rows.append({
+                    "Zeitraum": label,
+                    "Prognose": f"{pred*100:.2f}%",
+                    "Trend": trend,
+                    "Modell": info.get("model", ""),
+                    "R²": f"{info.get('r2', 0):.2f}",
+                    "n": info.get("n", "")
+                })
+        st.table(pd.DataFrame(rows))
+        st.markdown("---")
+
+# --- Integration in dein Dashboard ---
+# Einfach unterhalb von "main()" am Ende hinzufügen:
+show_multi_tf_section()
