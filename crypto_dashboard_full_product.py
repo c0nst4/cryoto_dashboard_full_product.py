@@ -270,68 +270,141 @@ def main():
                 rows.append({"Zeitraum":label,"Prognose":f"{p*100:.2f}%","Trend":trend,"Modell":info.get("model",""),"n":info.get("n","")})
         st.table(pd.DataFrame(rows))
 
+# =========================================
+# 🧠 MULTI-TIMEFRAME FEATURE ENGINEERING + ML PROGNOSE
+# =========================================
 
-# ---------------- MULTI-TIMEFRAME PROGNOSE ---------------
+def build_multi_tf_features(asset):
+    """
+    Baut kombinierte technische & makroökonomische Features
+    aus mehreren Timeframes (4h, 1d, 1w).
+    Ziel: robustere Prognosen durch Multi-Skalen-Signale.
+    """
+    try:
+        # --- 4H Daten ---
+        df_4h = yf.download(asset, period="360d", interval="4h", progress=False)
+        if df_4h is not None and not df_4h.empty:
+            df_4h = compute_technical(df_4h)
+            df_4h = df_4h.add_suffix("_4h")
+        else:
+            df_4h = pd.DataFrame()
+
+        # --- Tagesdaten ---
+        df_d = yf.download(asset, period="max", interval="1d", progress=False)
+        if df_d is not None and not df_d.empty:
+            df_d = compute_technical(df_d)
+            df_d = df_d.add_suffix("_1d")
+        else:
+            df_d = pd.DataFrame()
+
+        # --- Wochen-Daten ---
+        df_w = yf.download(asset, period="5y", interval="1wk", progress=False)
+        if df_w is not None and not df_w.empty:
+            df_w = compute_technical(df_w)
+            df_w = df_w.add_suffix("_1w")
+        else:
+            df_w = pd.DataFrame()
+
+        # --- Zusammenführen ---
+        dfs = [df for df in [df_4h, df_d, df_w] if not df.empty]
+        if not dfs:
+            return pd.DataFrame()
+
+        for i, df in enumerate(dfs):
+            try:
+                df.index = pd.to_datetime(df.index)
+            except Exception:
+                pass
+            dfs[i] = df
+
+        df_all = pd.concat(dfs, axis=1)
+        df_all = df_all[~df_all.index.duplicated(keep="last")]
+        df_all = df_all.sort_index()
+
+        # --- Close-Spalte bestimmen ---
+        close_col = [c for c in df_all.columns if "Close_1d" in c]
+        if close_col:
+            df_all["Close"] = df_all[close_col[0]]
+        else:
+            df_all["Close"] = df_all.iloc[:, 0]
+
+        # --- Zusatzfeatures ---
+        df_all["Ret1"] = df_all["Close"].pct_change(1)
+
+        # Makro-Daten hinzufügen
+        macro = fetch_macro_timeseries()
+        if not macro.empty:
+            macro = macro.reindex(df_all.index, method="ffill").fillna(0)
+            df_all["VIX"] = macro.get("VIX", 0)
+            df_all["DXY"] = macro.get("DXY", 0)
+        else:
+            df_all["VIX"] = 0
+            df_all["DXY"] = 0
+
+        return df_all.fillna(0)
+
+    except Exception as e:
+        print(f"⚠️ Fehler in build_multi_tf_features({asset}): {e}")
+        return pd.DataFrame()
+
+
 def train_predict_multi_tf(asset, horizon_days=7):
     """
-    Trainiert ein ML-Modell (GradientBoosting oder LinearRegression)
-    auf kombinierten Multi-Timeframe-Daten (4h, 1d, 1w).
-    Gibt eine Preisprognose (in %) und Modell-Infos zurück.
+    Trainiert ein Multi-Timeframe-Modell (Gradient Boosting / Linear Regression)
+    zur Prognose von Kursänderungen über mehrere Zeithorizonte.
     """
-    df = build_multi_tf_features(asset)
-    if df is None or df.empty:
-        return None, {"status": "no_data"}
-
-    # Zielvariable (prozentuale Preisänderung über Zeitraum)
-    df["target"] = df["Close"].shift(-horizon_days) / df["Close"] - 1
-    df = df.dropna(subset=["target"])
-    n = len(df)
-    if n < 50:
-        return None, {"status": "not_enough_rows", "n": n}
-
-    # Features
-    features = [
-        "RSI", "MACD_DIFF", "EMA20", "EMA50", "EMA200",
-        "SMA20", "SMA50", "SMA200", "Ret1", "VIX", "DXY"
-    ]
-    features = [f for f in features if f in df.columns]
-    if not features:
-        return None, {"status": "no_features"}
-
-    X = df[features].fillna(0).values
-    y = df["target"].values
-
     try:
-        if n >= 150:
-            # Gradient Boosting
+        df = build_multi_tf_features(asset)
+        if df is None or df.empty:
+            return None, {"status": "no_data"}
+
+        # Zielvariable: prozentuale Veränderung
+        df["target"] = df["Close"].shift(-horizon_days) / df["Close"] - 1
+        df = df.dropna()
+        n = len(df)
+        if n < 60:
+            return None, {"status": "not_enough_rows", "n": n}
+
+        # Feature-Auswahl
+        feat_cols = [c for c in df.columns if any(x in c for x in ["RSI", "MACD_DIFF", "EMA", "SMA", "Vol", "VIX", "DXY"])]
+
+        if not feat_cols:
+            return None, {"status": "no_features"}
+
+        X = df[feat_cols].values
+        y = df["target"].values
+
+        # --- Machine Learning: Gradient Boosting bevorzugt ---
+        if n > 120:
             from sklearn.ensemble import GradientBoostingRegressor
             from sklearn.preprocessing import StandardScaler
             from sklearn.metrics import r2_score
 
             sc = StandardScaler().fit(X)
             X_scaled = sc.transform(X)
+            Xtr, Xte = X_scaled[:-60], X_scaled[-60:]
+            ytr, yte = y[:-60], y[-60:]
             model = GradientBoostingRegressor(
-                n_estimators=150, learning_rate=0.05, max_depth=3, random_state=42
+                n_estimators=180, learning_rate=0.05, max_depth=3, random_state=42
             )
-            model.fit(X_scaled[:-30], y[:-30])
-            pred = float(model.predict(sc.transform(df[features].tail(1)))[0])
-            r2 = float(r2_score(y[-30:], model.predict(X_scaled[-30:])))
-            return pred, {"model": "GB", "r2": r2, "n": n}
+            model.fit(Xtr, ytr)
+            pred = float(model.predict(sc.transform(df[feat_cols].tail(1)))[0])
+            r2 = float(r2_score(yte, model.predict(Xte)))
+            return pred, {"model": "GradientBoosting", "r2": r2, "n": n}
+
+        # --- Fallback: Lineare Regression ---
         else:
-            # Linear Regression fallback
             from sklearn.linear_model import LinearRegression
 
             lr = LinearRegression().fit(X, y)
-            pred = float(lr.predict(df[features].tail(1).values)[0])
-            return pred, {"model": "LR", "n": n}
+            pred = float(lr.predict(df[feat_cols].tail(1).values)[0])
+            return pred, {"model": "LinearRegression", "n": n}
+
     except Exception as e:
-        print(f"⚠️ Fehler bei train_predict_multi_tf({asset}): {e}")
-        # heuristische Rückfallebene
-        if "Ret1" in df.columns:
-            mean_ret = df["Ret1"].tail(50).mean()
-            return mean_ret, {"model": "heuristic", "n": n}
+        print(f"⚠️ Fehler in train_predict_multi_tf({asset}): {e}")
         return None, {"status": "error", "msg": str(e)}
     
+
 
 
 # ---------------- SWING SIGNALS (robust) ----------------
