@@ -272,53 +272,66 @@ def main():
 
 
 # ---------------- MULTI-TIMEFRAME PROGNOSE ---------------
-def build_multi_tf_features(asset):
+def train_predict_multi_tf(asset, horizon_days=7):
     """
-    Kombiniert Daten aus 4h-, 1d- und 1w-Timeframes.
-    Erzwingt einheitlichen Index (datetime64[ns]),
-    um Sortierfehler (__richcmp__) zuverlässig zu verhindern.
+    Trainiert ein ML-Modell (GradientBoosting oder LinearRegression)
+    auf kombinierten Multi-Timeframe-Daten (4h, 1d, 1w).
+    Gibt eine Preisprognose (in %) und Modell-Infos zurück.
     """
-    intervals = {"4h": "60d", "1d": "max", "1wk": "5y"}
-    frames = []
+    df = build_multi_tf_features(asset)
+    if df is None or df.empty:
+        return None, {"status": "no_data"}
 
-    for tf, period in intervals.items():
-        try:
-            df = yf.download(asset, period=period, interval=tf, progress=False)
-            if df.empty:
-                continue
-            df = compute_technical(df)
-            df["Ret1"] = df["Close"].pct_change()
-            df["tf"] = tf
+    # Zielvariable (prozentuale Preisänderung über Zeitraum)
+    df["target"] = df["Close"].shift(-horizon_days) / df["Close"] - 1
+    df = df.dropna(subset=["target"])
+    n = len(df)
+    if n < 50:
+        return None, {"status": "not_enough_rows", "n": n}
 
-            # Index strikt zu datetime umwandeln und Zeitzonen entfernen
-            df.index = pd.to_datetime(df.index, errors="coerce")
-            df.index = df.index.tz_localize(None)
-            df = df[~df.index.isna()]
-            frames.append(df)
-        except Exception as e:
-            print(f"Fehler in {asset}-{tf}: {e}")
-            continue
+    # Features
+    features = [
+        "RSI", "MACD_DIFF", "EMA20", "EMA50", "EMA200",
+        "SMA20", "SMA50", "SMA200", "Ret1", "VIX", "DXY"
+    ]
+    features = [f for f in features if f in df.columns]
+    if not features:
+        return None, {"status": "no_features"}
 
-    if not frames:
-        return pd.DataFrame()
+    X = df[features].fillna(0).values
+    y = df["target"].values
 
     try:
-        # Zusammenführen
-        df_all = pd.concat(frames, axis=0)
+        if n >= 150:
+            # Gradient Boosting
+            from sklearn.ensemble import GradientBoostingRegressor
+            from sklearn.preprocessing import StandardScaler
+            from sklearn.metrics import r2_score
 
-        # Index vereinheitlichen in int64 für Sortierung
-        idx_numeric = pd.to_datetime(df_all.index, errors="coerce").view(np.int64)
-        df_all = df_all.assign(_sort_index=idx_numeric)
-        df_all = df_all.dropna(subset=["_sort_index"])
-        df_all = df_all.sort_values(by="_sort_index").drop(columns="_sort_index")
+            sc = StandardScaler().fit(X)
+            X_scaled = sc.transform(X)
+            model = GradientBoostingRegressor(
+                n_estimators=150, learning_rate=0.05, max_depth=3, random_state=42
+            )
+            model.fit(X_scaled[:-30], y[:-30])
+            pred = float(model.predict(sc.transform(df[features].tail(1)))[0])
+            r2 = float(r2_score(y[-30:], model.predict(X_scaled[-30:])))
+            return pred, {"model": "GB", "r2": r2, "n": n}
+        else:
+            # Linear Regression fallback
+            from sklearn.linear_model import LinearRegression
 
-        # Index wieder in echte Datetime umwandeln
-        df_all.index = pd.to_datetime(df_all.index, errors="coerce")
-        df_all = df_all[~df_all.index.isna()].drop_duplicates()
-    except Exception:
-        df_all = pd.concat(frames, axis=0).drop_duplicates()
-
-    return df_all.fillna(0)
+            lr = LinearRegression().fit(X, y)
+            pred = float(lr.predict(df[features].tail(1).values)[0])
+            return pred, {"model": "LR", "n": n}
+    except Exception as e:
+        print(f"⚠️ Fehler bei train_predict_multi_tf({asset}): {e}")
+        # heuristische Rückfallebene
+        if "Ret1" in df.columns:
+            mean_ret = df["Ret1"].tail(50).mean()
+            return mean_ret, {"model": "heuristic", "n": n}
+        return None, {"status": "error", "msg": str(e)}
+    
 
 
 # ---------------- SWING SIGNALS (robust) ----------------
