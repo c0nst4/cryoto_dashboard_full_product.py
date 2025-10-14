@@ -349,7 +349,6 @@ def train_predict_multi_tf(asset, horizon_days=7):
     r2 = float(r2_score(yte, model.predict(Xte)))
     return pred, {"model": "GB_MultiTF", "r2": r2, "n": n}
 
-
 # ============================================================
 # 📊 ANZEIGE DER MULTI-TIMEFRAME-PROGNOSE
 # ============================================================
@@ -394,3 +393,4 @@ def show_multi_tf_section():
 # --- Integration in dein Dashboard ---
 # Einfach unterhalb von "main()" am Ende hinzufügen:
 show_multi_tf_section()
+
