@@ -1,4 +1,4 @@
-# crypto_forecast_pro_multisource.py
+Pop# crypto_forecast_pro_multisource.py
 """
 Krypto-Prognose-App (einseitig)
 - Multi-News (Investing.com, CoinDesk, CoinTelegraph, Bitcoin.com, Google News)
@@ -275,6 +275,9 @@ def compute_technical(df):
         df["MACD_DIFF"] = df["MACD"] - df["MACD_SIGNAL"]
     except Exception:
         df["MACD"] = df["MACD_SIGNAL"] = df["MACD_DIFF"] = np.nan
+            # Geopolitisches Sentiment hinzufügen
+        geo_sent = get_geo_sentiment_score()
+        df["GeoSentiment"] = geo_sent
     return df.fillna(0)
 
 # ---------------- FEATURE BUILD ----------------
