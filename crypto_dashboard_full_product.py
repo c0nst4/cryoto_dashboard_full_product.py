@@ -160,6 +160,29 @@ def analyze_macro_sentiment(df: pd.DataFrame):
 
     return sentiment, int(bull), int(bear)
 
+# ============================================================
+# 🔍 GEO-SENTIMENT SCORE (für Integration in Prognose)
+# ============================================================
+
+def get_geo_sentiment_score():
+    """
+    Berechnet einen numerischen Score (-1 = negativ, 0 = neutral, +1 = positiv)
+    basierend auf geopolitischen & wirtschaftlichen News-Schlagzeilen.
+    """
+    try:
+        df_news = fetch_macro_geopolitical_news(60)
+        if df_news.empty:
+            return 0.0
+        sentiment, bull, bear = analyze_macro_sentiment(df_news)
+        if "Positiv" in sentiment:
+            return 1.0
+        elif "Negativ" in sentiment:
+            return -1.0
+        else:
+            return 0.0
+    except Exception:
+        return 0.0
+
 
 def show_macro_geopolitical_analysis():
     st.subheader("🌍 Erweiterte Makro- & Geopolitik-Analyse")
