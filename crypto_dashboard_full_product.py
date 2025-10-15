@@ -359,6 +359,9 @@ def main():
             else:
                 st.write(f"DXY: {dxy_val:.2f} | VIX: {vix_val:.2f}")
 
+# Erweiterte geopolitische Makro-Analyse
+show_macro_geopolitical_analysis()
+    
     # News
     st.subheader("📰 Relevante Krypto- und Makro-News")
     news = fetch_news_multi(12)
