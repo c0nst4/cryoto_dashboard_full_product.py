@@ -71,6 +71,126 @@ def fetch_news_multi(limit=20):
         seen.add(t); dedup.append(n)
     return dedup[:limit] if dedup else [{"source":"System","title":"Keine News gefunden","link":"","date":""}]
 
+# ============================================================
+# 🌍 ERWEITERTE MAKRO- UND GEOPOLITIK-NEWS-ANALYSE
+# ============================================================
+
+@st.cache_data(ttl=900)
+def fetch_macro_geopolitical_news(limit=60):
+    """Lädt geopolitische, wirtschaftliche, energiebezogene und Krypto-News aus mehreren Quellen."""
+    feeds = [
+        # --- Geopolitik & Sicherheit ---
+        ("Reuters World", "https://feeds.reuters.com/Reuters/worldNews"),
+        ("BBC World", "http://feeds.bbci.co.uk/news/world/rss.xml"),
+        ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+        ("Defense News", "https://www.defensenews.com/arc/outboundfeeds/rss/"),
+
+        # --- Wirtschaft & Zentralbanken ---
+        ("Bloomberg", "https://www.bloomberg.com/feed/podcast/etf-report.xml"),
+        ("CNBC", "https://www.cnbc.com/id/100727362/device/rss/rss.html"),
+        ("MarketWatch", "https://www.marketwatch.com/rss/topstories"),
+
+        # --- Energie & Rohstoffe ---
+        ("OilPrice", "https://oilprice.com/rss/main"),
+        ("Investing Energy", "https://www.investing.com/rss/news_301.rss"),
+        ("TradingEconomics", "https://tradingeconomics.com/rss/news"),
+
+        # --- Anleihen & USD-Stärke ---
+        ("Financial Times", "https://www.ft.com/?format=rss"),
+        ("Yahoo Bonds", "https://finance.yahoo.com/news/rssindex"),
+        ("FRED", "https://fredblog.stlouisfed.org/feed/"),
+
+        # --- Krypto-Regulierung & ETF-News ---
+        ("CoinDesk", "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+        ("CoinTelegraph", "https://cointelegraph.com/rss"),
+        ("CryptoSlate", "https://cryptoslate.com/feed/"),
+        ("The Block", "https://www.theblock.co/rss"),
+
+        # --- China & Asien ---
+        ("Nikkei Asia", "https://asia.nikkei.com/rss/feed/nar"),
+        ("SCMP", "https://www.scmp.com/rss/91/feed")
+    ]
+
+    headers = {"User-Agent": "Mozilla/5.0"}
+    all_news = []
+    for src, url in feeds:
+        try:
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code != 200:
+                continue
+            soup = BeautifulSoup(r.content, "xml")
+            for item in soup.find_all("item")[: max(1, limit // len(feeds))]:
+                title = item.title.text if item.title else ""
+                link = item.link.text if item.link else ""
+                date = item.pubDate.text if item.pubDate else ""
+                if title:
+                    all_news.append({"source": src, "title": title.strip(), "link": link, "date": date})
+        except Exception:
+            continue
+
+    df = pd.DataFrame(all_news).drop_duplicates(subset=["title"])
+    return df.head(limit)
+
+
+def analyze_macro_sentiment(df: pd.DataFrame):
+    """Einfache Sentiment-Analyse auf Basis geopolitischer Schlagwörter."""
+    if df.empty:
+        return "Neutral", 0, 0
+
+    bullish_terms = [
+        "ceasefire", "growth", "recovery", "approval", "progress",
+        "peace", "deal", "expansion", "rate cut", "stimulus", "adoption",
+        "ETF approval", "inflation falling", "cooling prices"
+    ]
+    bearish_terms = [
+        "war", "conflict", "attack", "crisis", "sanction", "missile", "strike",
+        "inflation rise", "recession", "rate hike", "shutdown", "collapse",
+        "tension", "default", "ban", "regulation", "tightening"
+    ]
+
+    bull = df["title"].str.lower().str.count("|".join(bullish_terms)).sum()
+    bear = df["title"].str.lower().str.count("|".join(bearish_terms)).sum()
+
+    if bull > bear * 1.2:
+        sentiment = "🟢 Positiv (Risikofreude)"
+    elif bear > bull * 1.2:
+        sentiment = "🔻 Negativ (Risikoaversion)"
+    else:
+        sentiment = "⚪ Neutral / Unsicher"
+
+    return sentiment, int(bull), int(bear)
+
+
+def show_macro_geopolitical_analysis():
+    st.subheader("🌍 Erweiterte Makro- & Geopolitik-Analyse")
+
+    df_news = fetch_macro_geopolitical_news(60)
+    if df_news.empty:
+        st.info("Keine geopolitischen Makro-News gefunden.")
+        return
+
+    sentiment, bull, bear = analyze_macro_sentiment(df_news)
+    st.markdown(f"**Gesamtstimmung:** {sentiment}")
+    st.caption(f"🟢 Bullishe Keywords: {bull} | 🔻 Bearishe Keywords: {bear}")
+
+    categories = {
+        "Geopolitik & Sicherheit": ["Reuters", "BBC", "Al Jazeera", "Defense"],
+        "Wirtschaft & Zentralbanken": ["Bloomberg", "CNBC", "MarketWatch", "FRED", "ECB"],
+        "Energie & Rohstoffe": ["OilPrice", "Investing", "TradingEconomics"],
+        "Anleihen & USD-Stärke": ["Financial Times", "Yahoo Bonds"],
+        "Krypto & Regulierung": ["CoinDesk", "CoinTelegraph", "CryptoSlate", "The Block"],
+        "China & Asien": ["Nikkei", "SCMP"]
+    }
+
+    for cat, keys in categories.items():
+        subset = df_news[df_news["source"].str.contains("|".join(keys), case=False)]
+        if not subset.empty:
+            st.markdown(f"### {cat}")
+            for _, n in subset.head(5).iterrows():
+                st.markdown(f"- **[{n['source']}]** [{n['title']}]({n['link']})")
+            st.markdown("---")
+
+
 # ---------------- MACRO ----------------
 @st.cache_data(ttl=3600)
 def fetch_macro_timeseries(days=365*5):
