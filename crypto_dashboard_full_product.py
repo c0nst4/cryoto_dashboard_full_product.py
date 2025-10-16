@@ -258,16 +258,21 @@ def fetch_fear_greed():
 
 # ---------------- TECHNICAL INDICATORS ----------------
 def compute_technical(df):
-    if df is None or df.empty: return df
+    if df is None or df.empty:
+        return df
+
     close = df["Close"]
-    for p in (20,50,200):
+    for p in (20, 50, 200):
         df[f"SMA{p}"] = close.rolling(p, min_periods=1).mean()
         df[f"EMA{p}"] = close.ewm(span=p, adjust=False).mean()
-    # RSI may fail if not enough data -> wrap
+
+    # RSI
     try:
         df["RSI"] = ta.momentum.RSIIndicator(close, 14).rsi()
     except Exception:
         df["RSI"] = np.nan
+
+    # MACD
     try:
         macd = ta.trend.MACD(close)
         df["MACD"] = macd.macd()
@@ -275,14 +280,17 @@ def compute_technical(df):
         df["MACD_DIFF"] = df["MACD"] - df["MACD_SIGNAL"]
     except Exception:
         df["MACD"] = df["MACD_SIGNAL"] = df["MACD_DIFF"] = np.nan
-        # Geopolitisches Sentiment hinzufügen (adaptive Gewichtung)
-geo_sent = get_geo_sentiment_score()
 
-# Wenn sehr viele bearishe oder bullishe Nachrichten erkannt wurden, verstärke den Effekt automatisch
-if geo_sent != 0:
-    df["GeoSentiment"] = geo_sent * 2.5  # starke geopolitische Phase
-else:
-    df["GeoSentiment"] = geo_sent * 1.0  # neutrale Phase
+    # 🌍 Geopolitisches Sentiment hinzufügen (adaptive Gewichtung)
+    geo_sent = get_geo_sentiment_score()
+
+    # Wenn viele bearishe oder bullishe Nachrichten erkannt wurden, verstärke den Effekt
+    if geo_sent != 0:
+        df["GeoSentiment"] = geo_sent * 2.5  # stärkere geopolitische Phase
+    else:
+        df["GeoSentiment"] = geo_sent * 1.0  # neutrale Phase
+
+    return df.fillna(0)
 
 # ---------------- FEATURE BUILD ----------------
 @st.cache_data(ttl=1800)
