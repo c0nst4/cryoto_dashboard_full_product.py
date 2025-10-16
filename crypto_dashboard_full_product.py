@@ -275,10 +275,14 @@ def compute_technical(df):
         df["MACD_DIFF"] = df["MACD"] - df["MACD_SIGNAL"]
     except Exception:
         df["MACD"] = df["MACD_SIGNAL"] = df["MACD_DIFF"] = np.nan
-            # Geopolitisches Sentiment hinzufügen
-        geo_sent = get_geo_sentiment_score()
-        df["GeoSentiment"] = geo_sent
-    return df.fillna(0)
+        # Geopolitisches Sentiment hinzufügen (adaptive Gewichtung)
+geo_sent = get_geo_sentiment_score()
+
+# Wenn sehr viele bearishe oder bullishe Nachrichten erkannt wurden, verstärke den Effekt automatisch
+if geo_sent != 0:
+    df["GeoSentiment"] = geo_sent * 2.5  # starke geopolitische Phase
+else:
+    df["GeoSentiment"] = geo_sent * 1.0  # neutrale Phase
 
 # ---------------- FEATURE BUILD ----------------
 @st.cache_data(ttl=1800)
