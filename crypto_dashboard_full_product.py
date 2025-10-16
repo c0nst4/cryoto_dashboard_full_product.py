@@ -1,4 +1,4 @@
-Pop# crypto_forecast_pro_multisource.py
+# crypto_forecast_pro_multisource.py
 """
 Krypto-Prognose-App (einseitig)
 - Multi-News (Investing.com, CoinDesk, CoinTelegraph, Bitcoin.com, Google News)
