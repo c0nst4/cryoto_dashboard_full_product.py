@@ -393,16 +393,7 @@ def main():
             else:
                 st.write(f"DXY: {dxy_val:.2f} | VIX: {vix_val:.2f}")
 
-    # Erweiterte geopolitische Makro-Analyse
-    show_macro_geopolitical_analysis()
 
-    geo_score = get_geo_sentiment_score()
-    if geo_score > 0:
-        st.success("🌍 Globales Nachrichten-Sentiment: 🟢 Positiv (Risikofreude)")
-    elif geo_score < 0:
-        st.error("🌍 Globales Nachrichten-Sentiment: 🔻 Negativ (Risikoaversion)")
-    else:
-        st.info("🌍 Globales Nachrichten-Sentiment: ⚪ Neutral")
     
     # News
     st.subheader("📰 Relevante Krypto- und Makro-News")
