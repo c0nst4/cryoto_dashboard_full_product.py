@@ -375,9 +375,10 @@ def train_predict(df, horizon):
     if n < MIN_ROWS_HEUR:
         return None, {"status":"not_enough_rows", "n":n}
 
-    feats = [c for c in ["RSI","MACD_DIFF","EMA20","EMA50","EMA200",
-                     "SMA20","SMA50","SMA200","Vol14","DXY","VIX","FearGreed","GeoSentiment"]
-         if c in df.columns]
+feats = [c for c in ["RSI","MACD_DIFF","EMA20","EMA50","EMA200",
+                     "SMA20","SMA50","SMA200","Vol14","DXY","VIX",
+                     "FearGreed","GeoSentiment","GlobalSentiment"]
+         if c in df.columns]    
     
     if not feats:
         return None, {"status":"no_features"}
