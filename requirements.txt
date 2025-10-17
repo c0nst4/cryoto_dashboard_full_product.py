@@ -11,3 +11,10 @@ pandas_datareader
 lxml
 html5lib
 feedparser
+transformers==4.44.2
+torch
+sentencepiece
+scikit-learn
+beautifulsoup4
+requests
+googletrans==4.0.0rc1
