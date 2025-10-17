@@ -23,6 +23,8 @@ from sklearn.metrics import r2_score, mean_squared_error
 from datetime import datetime
 import warnings
 import math
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from googletrans import Translator
 warnings.filterwarnings("ignore")
 
 # ---------------- CONFIG ----------------
@@ -246,11 +248,7 @@ def fetch_macro_timeseries(days=365*5):
     return df
 
 
-# ============================================================
-# 🧠 ERWEITERTE KI-NACHRICHTENANALYSE (A–G)
-# ============================================================
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
-from googletrans import Translator
+
 
 @st.cache_resource
 def load_sentiment_model():
