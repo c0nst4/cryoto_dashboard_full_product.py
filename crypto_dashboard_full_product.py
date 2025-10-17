@@ -245,7 +245,7 @@ def fetch_macro_timeseries(days=365*5):
     df = df.dropna(how="all")
     return df
 
-@st.cache_data(ttl=1800)
+
 # ============================================================
 # 🧠 ERWEITERTE KI-NACHRICHTENANALYSE (A–G)
 # ============================================================
