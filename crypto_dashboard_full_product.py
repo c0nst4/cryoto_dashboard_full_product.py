@@ -382,17 +382,21 @@ def train_predict(df, horizon):
     df["target"] = df["Close"].shift(-horizon) / df["Close"] - 1
     df = df.dropna()
     n = len(df)
-    if n < MIN_ROWS_HEUR:
-        return None, {"status":"not_enough_rows", "n":n}
 
-feats = [c for c in ["RSI","MACD_DIFF","EMA20","EMA50","EMA200",
-                     "SMA20","SMA50","SMA200","Vol14","DXY","VIX",
-                     "FearGreed","GeoSentiment","GlobalSentiment"]
-         if c in df.columns]    
-    
+    if n < MIN_ROWS_HEUR:
+        return None, {"status": "not_enough_rows", "n": n}
+
+    feats = [c for c in [
+        "RSI", "MACD_DIFF", "EMA20", "EMA50", "EMA200",
+        "SMA20", "SMA50", "SMA200", "Vol14", "DXY", "VIX",
+        "FearGreed", "GeoSentiment", "GlobalSentiment"
+    ] if c in df.columns]
+
     if not feats:
-        return None, {"status":"no_features"}
+        return None, {"status": "no_features"}
+
     X, y = df[feats].values, df["target"].values
+
     if n >= MIN_ROWS_GB:
         try:
             Xtr, ytr = X[:-60], y[:-60]
@@ -402,21 +406,24 @@ feats = [c for c in ["RSI","MACD_DIFF","EMA20","EMA50","EMA200",
             model = GradientBoostingRegressor(**GB_PARAMS).fit(Xtr, ytr)
             pred = float(model.predict(sc.transform(df[feats].tail(1)))[0])
             r2 = float(r2_score(yte, model.predict(Xte)))
-            return pred, {"model":"GB","r2":r2,"n":n}
+            return pred, {"model": "GB", "r2": r2, "n": n}
         except Exception:
             pass
+
     if n >= MIN_ROWS_LR:
         try:
             lr = LinearRegression().fit(X, y)
             pred = float(lr.predict(df[feats].tail(1).values)[0])
-            return pred, {"model":"LR","n":n}
+            return pred, {"model": "LR", "n": n}
         except Exception:
             pass
+
     # heuristic fallback
     if "Ret1" in df.columns:
         recent = df["Ret1"].tail(60).mean()
-        return recent, {"model":"heuristic","n":n}
-    return None, {"status":"no_fallback"}
+        return recent, {"model": "heuristic", "n": n}
+
+    return None, {"status": "no_fallback"}
 
 # ---------------- Utility: safe number extractor ----------------
 def safe_num(val):
