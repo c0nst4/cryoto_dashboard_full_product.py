@@ -246,6 +246,67 @@ def fetch_macro_timeseries(days=365*5):
     return df
 
 @st.cache_data(ttl=1800)
+# ============================================================
+# 🧠 ERWEITERTE KI-NACHRICHTENANALYSE (A–G)
+# ============================================================
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from googletrans import Translator
+
+@st.cache_resource
+def load_sentiment_model():
+    """Lädt das FinBERT-Modell für Finanz-Stimmungsanalyse."""
+    model_name = "ProsusAI/finbert"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+
+@st.cache_data(ttl=900)
+def get_advanced_global_sentiment(limit=60):
+    """Analysiert internationale Nachrichten mit KI-Sentiment-Analyse."""
+    try:
+        df_news = fetch_macro_geopolitical_news(limit)
+        if df_news.empty:
+            return 0.0, pd.DataFrame()
+
+        translator = Translator()
+        finbert = load_sentiment_model()
+
+        results = []
+        for _, row in df_news.iterrows():
+            title = row["title"]
+            if not title:
+                continue
+            # Übersetze in Englisch, da FinBERT englisch trainiert ist
+            try:
+                translated = translator.translate(title, dest="en").text
+            except Exception:
+                translated = title
+            res = finbert(translated[:512])[0]
+            score = res["score"] if res["label"] == "positive" else -res["score"] if res["label"] == "negative" else 0
+            results.append(score)
+
+        sentiment_val = np.mean(results) if results else 0.0
+        return sentiment_val, df_news
+
+    except Exception:
+        return 0.0, pd.DataFrame()
+
+def show_advanced_news_analysis():
+    """Zeigt KI-bewertete globale Nachrichten-Stimmung."""
+    st.subheader("🧠 KI-basierte globale Nachrichten-Stimmung")
+    sentiment_val, df_news = get_advanced_global_sentiment(60)
+    if df_news.empty:
+        st.info("Keine aktuellen Nachrichten analysiert.")
+        return 0.0
+
+    if sentiment_val > 0.2:
+        st.success(f"🟢 Positiv ({sentiment_val:.2f}) – Optimistische Marktstimmung")
+    elif sentiment_val < -0.2:
+        st.error(f"🔻 Negativ ({sentiment_val:.2f}) – Risikoaversion & Unsicherheit")
+    else:
+        st.info(f"⚪ Neutral ({sentiment_val:.2f}) – Gemischte Marktstimmung")
+
+    return sentiment_val
 def fetch_fear_greed():
     try:
         r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8)
