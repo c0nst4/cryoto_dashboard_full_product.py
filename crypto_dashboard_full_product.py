@@ -248,7 +248,9 @@ def fetch_macro_timeseries(days=365*5):
     return df
 
 
-
+# ===========================================================
+# 🧠 ERWEITERTE KI-NACHRICHTENANALYSE (A–G)
+# ===========================================================
 
 @st.cache_resource
 def load_sentiment_model():
