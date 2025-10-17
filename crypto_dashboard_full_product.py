@@ -454,15 +454,21 @@ def main():
                 st.write(f"DXY: {dxy_val:.2f} | VIX: {vix_val:.2f}")
 
     # Erweiterte geopolitische Makro-Analyse
-    show_macro_geopolitical_analysis()
+show_macro_geopolitical_analysis()
 
-    geo_score = get_geo_sentiment_score()
-    if geo_score > 0:
-        st.success("🌍 Globales Nachrichten-Sentiment: 🟢 Positiv (Risikofreude)")
-    elif geo_score < 0:
-        st.error("🌍 Globales Nachrichten-Sentiment: 🔻 Negativ (Risikoaversion)")
-    else:
-        st.info("🌍 Globales Nachrichten-Sentiment: ⚪ Neutral")
+# KI-basierte Nachrichtenanalyse (FinBERT + Übersetzung)
+sentiment_val = show_advanced_news_analysis()
+
+# Zusammenfassung aus Geo- und KI-Sentiment
+geo_score = get_geo_sentiment_score()
+combined_sentiment = (geo_score + sentiment_val) / 2
+
+if combined_sentiment > 0.2:
+    st.success("🌍 Gesamtstimmung: 🟢 Positiv – Optimistische Marktphase")
+elif combined_sentiment < -0.2:
+    st.error("🌍 Gesamtstimmung: 🔻 Negativ – Risikoaversion & Unsicherheit")
+else:
+    st.info("🌍 Gesamtstimmung: ⚪ Neutral – Abwartende Marktphase")
     
     # News
     st.subheader("📰 Relevante Krypto- und Makro-News")
