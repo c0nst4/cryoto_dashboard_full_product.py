@@ -306,7 +306,9 @@ def show_advanced_news_analysis():
     else:
         st.info(f"⚪ Neutral ({sentiment_val:.2f}) – Gemischte Marktstimmung")
 
+    
     return sentiment_val
+@st.cache_data(ttl=1800)
 def fetch_fear_greed():
     try:
         r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8)
