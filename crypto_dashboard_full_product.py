@@ -348,10 +348,13 @@ def compute_technical(df):
 def build_features(asset):
     try:
         df = yf.download(asset, period="max", interval="1d", progress=False)
-        if df is None or df.empty: return pd.DataFrame()
+        if df is None or df.empty:
+            return pd.DataFrame()
+
         df = compute_technical(df)
         df["Ret1"] = df["Close"].pct_change(1)
         df["Vol14"] = df["Ret1"].rolling(14).std().fillna(0)
+
         macro = fetch_macro_timeseries()
         if not macro.empty:
             macro = macro.reindex(df.index).fillna(method="ffill").fillna(method="bfill").fillna(0)
@@ -360,11 +363,16 @@ def build_features(asset):
         else:
             df["DXY"] = 0
             df["VIX"] = 0
+
         fgi, lbl = fetch_fear_greed()
         df["FearGreed"] = fgi if fgi else 50
+
+        # KI-Nachrichtensentiment einbinden
         sentiment_val, _ = get_advanced_global_sentiment()
-df["GlobalSentiment"] = sentiment_val
+        df["GlobalSentiment"] = sentiment_val
+
         return df.fillna(0)
+
     except Exception:
         return pd.DataFrame()
 
