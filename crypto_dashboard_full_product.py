@@ -360,6 +360,8 @@ def build_features(asset):
             df["VIX"] = 0
         fgi, lbl = fetch_fear_greed()
         df["FearGreed"] = fgi if fgi else 50
+        sentiment_val, _ = get_advanced_global_sentiment()
+df["GlobalSentiment"] = sentiment_val
         return df.fillna(0)
     except Exception:
         return pd.DataFrame()
