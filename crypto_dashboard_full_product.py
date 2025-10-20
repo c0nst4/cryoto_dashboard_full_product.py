@@ -359,9 +359,9 @@ def compute_technical(df):
         df["MACD_DIFF"] = df["MACD"] - df["MACD_SIGNAL"]
     except Exception:
         df["MACD"] = df["MACD_SIGNAL"] = df["MACD_DIFF"] = np.nan
-            # Geopolitisches Sentiment hinzufügen
-        geo_sent = get_geo_sentiment_score()
-        df["GeoSentiment"] = geo_sent
+    # Geopolitisches Sentiment hinzufügen
+    geo_sent = get_advanced_geo_sentiment_score()
+    df["GeoSentiment"] = geo_sent
     return df.fillna(0)
 
 # ---------------- FEATURE BUILD ----------------
