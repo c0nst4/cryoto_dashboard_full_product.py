@@ -418,8 +418,8 @@ def train_predict(df, horizon):
             model = GradientBoostingRegressor(**GB_PARAMS).fit(Xtr, ytr)
             pred = float(model.predict(sc.transform(df[feats].tail(1)))[0])
             r2 = float(r2_score(yte, model.predict(Xte)))
-            return pred, {"model":"GB","r2":r2,"n":n}
-                except Exception as e:
+                        return pred, {"model":"GB","r2":r2,"n":n}
+        except Exception as e:
             st.error(f"Fehler bei Modell {horizon} für {df.name if hasattr(df,'name') else '?'}: {e}")
     if n >= MIN_ROWS_LR:
         try:
