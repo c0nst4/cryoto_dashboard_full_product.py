@@ -371,8 +371,10 @@ def compute_technical(df):
 @st.cache_data(ttl=1800)
 def build_features(asset):
     try:
-        df = yf.download(asset, period="max", interval="1d", progress=False)
-        if df is None or df.empty: return pd.DataFrame()
+        df = yf.download(asset, period="5y", interval="1d", progress=False)
+        if df is None or df.empty:
+            st.warning(f"⚠️ Keine Marktdaten für {asset}")
+            return pd.DataFrame()
         df = compute_technical(df)
         df["Ret1"] = df["Close"].pct_change(1)
         df["Vol14"] = df["Ret1"].rolling(14).std().fillna(0)
