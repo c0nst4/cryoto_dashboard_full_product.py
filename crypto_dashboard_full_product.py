@@ -264,7 +264,10 @@ def get_advanced_geo_sentiment_score(save_history=True):
 
     # --- Gesamtergebnis
     mean_score = df["final_score"].mean()
-    mean_score = max(-1.0, min(1.0, mean_score))  # clamp to [-1,1]
+if not np.isfinite(mean_score):  # Prüft auf NaN oder inf
+    mean_score = 0.0
+mean_score = max(-1.0, min(1.0, float(mean_score)))  # clamp to [-1,1]
+return mean_score
 
     return float(mean_score)
 
