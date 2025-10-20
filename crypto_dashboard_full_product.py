@@ -476,7 +476,7 @@ def main():
     # Erweiterte geopolitische Makro-Analyse
     show_macro_geopolitical_analysis()
 
-    geo_score = get_geo_sentiment_score()
+        geo_score = get_advanced_geo_sentiment_score()
     if geo_score > 0:
         st.success("🌍 Globales Nachrichten-Sentiment: 🟢 Positiv (Risikofreude)")
     elif geo_score < 0:
