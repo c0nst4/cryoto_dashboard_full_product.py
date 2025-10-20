@@ -160,29 +160,113 @@ def analyze_macro_sentiment(df: pd.DataFrame):
 
     return sentiment, int(bull), int(bear)
 
+
 # ============================================================
-# 🔍 GEO-SENTIMENT SCORE (für Integration in Prognose)
+# 🧠 VERBESSERTE NACHRICHTEN- UND MAKRO-SENTIMENT-ANALYSE (A–G)
 # ============================================================
 
-def get_geo_sentiment_score():
+@st.cache_data(ttl=900)
+def get_advanced_geo_sentiment_score(save_history=True):
     """
-    Berechnet einen numerischen Score (-1 = negativ, 0 = neutral, +1 = positiv)
-    basierend auf geopolitischen & wirtschaftlichen News-Schlagzeilen.
+    Berechnet einen gewichteten Sentiment-Score (-1 bis +1)
+    auf Basis geopolitischer, makroökonomischer und krypto-bezogener Nachrichten.
+    Implementiert Verbesserungen A–G (ohne Transformers).
     """
-    try:
-        df_news = fetch_macro_geopolitical_news(60)
-        if df_news.empty:
-            return 0.0
-        sentiment, bull, bear = analyze_macro_sentiment(df_news)
-        if "Positiv" in sentiment:
-            return 1.0
-        elif "Negativ" in sentiment:
-            return -1.0
-        else:
-            return 0.0
-    except Exception:
+
+    df = fetch_macro_geopolitical_news(80)
+    if df.empty:
         return 0.0
 
+    # --- 🔹 A) Keyword-basierte Tiefenanalyse
+    bullish_terms = [
+        "growth", "recovery", "ceasefire", "peace", "deal", "adoption", "approval",
+        "cut rates", "stimulus", "support", "expansion", "optimism", "progress",
+        "inflation falling", "cooling prices", "etf approval", "rally"
+    ]
+    bearish_terms = [
+        "war", "conflict", "attack", "strike", "tension", "sanction", "crisis",
+        "collapse", "shutdown", "default", "inflation rise", "rate hike", "recession",
+        "tightening", "selloff", "ban", "regulation crackdown", "missile"
+    ]
+
+    def sentiment_from_text(text):
+        t = text.lower()
+        bull = sum(1 for w in bullish_terms if w in t)
+        bear = sum(1 for w in bearish_terms if w in t)
+        return bull - bear
+
+    df["sentiment_raw"] = df["title"].apply(sentiment_from_text)
+
+    # --- 🔹 B) Quellengewichtung
+    source_weights = {
+        "Reuters": 1.0, "BBC": 0.9, "Bloomberg": 1.0, "CNBC": 0.9,
+        "MarketWatch": 0.8, "Financial Times": 1.0, "Yahoo": 0.7,
+        "CoinDesk": 0.6, "CoinTelegraph": 0.6, "CryptoSlate": 0.6,
+        "Investing": 0.7, "OilPrice": 0.7, "Nikkei": 0.8, "SCMP": 0.7,
+        "Defense": 0.9, "Al Jazeera": 0.8, "The Block": 0.7
+    }
+    df["source_weight"] = df["source"].apply(
+        lambda s: next((w for k, w in source_weights.items() if k.lower() in s.lower()), 0.5)
+    )
+
+    # --- 🔹 C) Zeitliche Gewichtung (frische Nachrichten zählen mehr)
+    def time_weight(date_str):
+        try:
+            pub = pd.to_datetime(date_str)
+            age = (datetime.now() - pub).days
+            return np.exp(-age / 3)  # exponentieller Zerfall
+        except Exception:
+            return 1.0
+    df["time_weight"] = df["date"].apply(time_weight)
+
+    # --- 🔹 D) Themenklassifikation
+    categories = {
+        "Inflation/Zinsen": ["inflation", "rate", "interest", "fed", "ecb"],
+        "Konflikte/Geopolitik": ["war", "conflict", "attack", "missile", "taiwan", "ukraine", "israel", "iran"],
+        "Krypto/Regulierung": ["etf", "crypto", "bitcoin", "ethereum", "regulation", "sec", "approval"],
+        "Energie/Rohstoffe": ["oil", "energy", "gas", "commodity", "gold"],
+    }
+    def classify_topic(title):
+        t = title.lower()
+        for cat, kws in categories.items():
+            if any(k in t for k in kws):
+                return cat
+        return "Sonstige"
+    df["topic"] = df["title"].apply(classify_topic)
+
+    # --- 🔹 E) Gesamtgewichteter Sentimentwert
+    df["weighted_score"] = df["sentiment_raw"] * df["source_weight"] * df["time_weight"]
+
+    # --- 🔹 F) Themenbasierte Gewichtung (bestimmte Themen haben stärkere Marktwirkung)
+    topic_weights = {
+        "Inflation/Zinsen": 1.5,
+        "Konflikte/Geopolitik": -1.2,  # eher Risikoaversion
+        "Krypto/Regulierung": 1.0,
+        "Energie/Rohstoffe": -0.8,
+        "Sonstige": 0.5
+    }
+    df["topic_weight"] = df["topic"].map(topic_weights).fillna(1.0)
+    df["final_score"] = df["weighted_score"] * df["topic_weight"]
+
+    # --- 🔹 G) Historische Speicherung (optional)
+    if save_history:
+        hist_file = "sentiment_history.csv"
+        score_mean = df["final_score"].mean()
+        try:
+            hist = pd.read_csv(hist_file)
+        except Exception:
+            hist = pd.DataFrame(columns=["date", "sentiment"])
+        today = datetime.now().strftime("%Y-%m-%d")
+        if today not in hist["date"].values:
+            new_row = pd.DataFrame([{"date": today, "sentiment": score_mean}])
+            hist = pd.concat([hist, new_row], ignore_index=True)
+            hist.to_csv(hist_file, index=False)
+
+    # --- Gesamtergebnis
+    mean_score = df["final_score"].mean()
+    mean_score = max(-1.0, min(1.0, mean_score))  # clamp to [-1,1]
+
+    return float(mean_score)
 
 def show_macro_geopolitical_analysis():
     st.subheader("🌍 Erweiterte Makro- & Geopolitik-Analyse")
