@@ -262,12 +262,12 @@ def get_advanced_geo_sentiment_score(save_history=True):
             hist = pd.concat([hist, new_row], ignore_index=True)
             hist.to_csv(hist_file, index=False)
 
-    # --- Gesamtergebnis
+        # --- Gesamtergebnis
     mean_score = df["final_score"].mean()
-if not np.isfinite(mean_score):  # Prüft auf NaN oder inf
-    mean_score = 0.0
-mean_score = max(-1.0, min(1.0, float(mean_score)))  # clamp to [-1,1]
-return mean_score
+    if not np.isfinite(mean_score):  # Prüft auf NaN oder inf
+        mean_score = 0.0
+    mean_score = max(-1.0, min(1.0, float(mean_score)))  # clamp to [-1,1]
+    return mean_score
 
     return float(mean_score)
 
@@ -418,8 +418,8 @@ def train_predict(df, horizon):
             pred = float(model.predict(sc.transform(df[feats].tail(1)))[0])
             r2 = float(r2_score(yte, model.predict(Xte)))
             return pred, {"model":"GB","r2":r2,"n":n}
-        except Exception as e:
-    st.error(f"Fehler bei Modell {horizon} für {df.name if hasattr(df,'name') else '?'}: {e}")
+                except Exception as e:
+            st.error(f"Fehler bei Modell {horizon} für {df.name if hasattr(df,'name') else '?'}: {e}")
     if n >= MIN_ROWS_LR:
         try:
             lr = LinearRegression().fit(X, y)
