@@ -370,25 +370,42 @@ def compute_technical(df):
 @st.cache_data(ttl=1800)
 def build_features(asset):
     try:
-        df = yf.download(asset, period="5y", interval="1d", progress=False)
-        if df is None or df.empty:
-            st.warning(f"⚠️ Keine Marktdaten für {asset}")
-            return pd.DataFrame()
+        # Versuche, Yahoo Finance Daten zu laden (3 Versuche)
+        for _ in range(3):
+            df = yf.download(asset, period="5y", interval="1d", progress=False)
+            if df is not None and not df.empty:
+                break
+        else:
+            # Fallback: Simulierte Daten, wenn yfinance keine liefert
+            st.warning(f"⚠️ Keine Marktdaten von Yahoo Finance für {asset}, Fallback wird verwendet.")
+            idx = pd.date_range(end=datetime.now(), periods=365, freq="D")
+            df = pd.DataFrame({
+                "Close": np.linspace(20000, 40000, len(idx)) + np.random.randn(len(idx)) * 1000
+            }, index=idx)
+
+        # Technische Indikatoren berechnen
         df = compute_technical(df)
         df["Ret1"] = df["Close"].pct_change(1)
         df["Vol14"] = df["Ret1"].rolling(14).std().fillna(0)
+
+        # Makro-Faktoren einfügen
         macro = fetch_macro_timeseries()
         if not macro.empty:
             macro = macro.reindex(df.index).fillna(method="ffill").fillna(method="bfill").fillna(0)
             df["DXY"] = macro["DXY"]
             df["VIX"] = macro["VIX"]
         else:
-            df["DXY"] = 0
-            df["VIX"] = 0
+            df["DXY"] = 100
+            df["VIX"] = 20
+
+        # Fear & Greed Index hinzufügen
         fgi, lbl = fetch_fear_greed()
         df["FearGreed"] = fgi if fgi else 50
+
         return df.fillna(0)
-    except Exception:
+
+    except Exception as e:
+        st.error(f"❌ Fehler beim Aufbau der Features für {asset}: {e}")
         return pd.DataFrame()
 
 # ---------------- ML MODEL ----------------
